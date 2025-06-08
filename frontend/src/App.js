@@ -284,6 +284,55 @@ const PostGenerator = () => {
     toast.success('Copied to clipboard!');
   };
 
+  const exportPosts = async (format) => {
+    if (generatedPosts.length === 0) {
+      toast.error('No posts to export');
+      return;
+    }
+
+    try {
+      const postIds = generatedPosts.map(post => post.id);
+      const response = await apiService.exportPosts(format, postIds);
+      
+      // Create and download file
+      const blob = new Blob([response.data.content], { 
+        type: format === 'csv' ? 'text/csv' : 'text/plain' 
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = response.data.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success(`Posts exported as ${format.toUpperCase()}`);
+    } catch (error) {
+      toast.error('Error exporting posts');
+      console.error('Export error:', error);
+    }
+  };
+
+  const schedulePost = async (postContent, platform) => {
+    // For now, schedule for 1 hour from now - in a real app, user would select date/time
+    const scheduledDate = new Date();
+    scheduledDate.setHours(scheduledDate.getHours() + 1);
+
+    try {
+      await apiService.schedulePosts({
+        platform: platform,
+        content: postContent.content,
+        hashtags: postContent.hashtags,
+        scheduled_date: scheduledDate.toISOString()
+      });
+      toast.success('Post scheduled successfully!');
+    } catch (error) {
+      toast.error('Error scheduling post');
+      console.error('Scheduling error:', error);
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto p-6">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
