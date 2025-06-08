@@ -520,39 +520,42 @@ Only return valid JSON."""
         logger.error(f"Error analyzing post: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Unsplash Image Search endpoints
+# Unsplash Image Search endpoints (temporarily disabled)
 @api_router.get("/search-images")
 async def search_images(query: str, page: int = 1, per_page: int = 15):
     """Search for images on Unsplash"""
     try:
-        # Get API configuration
-        config = await db.api_configurations.find_one({"user_id": "default"})
-        if not config or not config.get("unsplash_api_key"):
-            raise HTTPException(status_code=400, detail="Unsplash API key not configured.")
+        # Temporarily disabled - need to configure Unsplash API properly
+        raise HTTPException(status_code=501, detail="Unsplash integration temporarily disabled")
         
-        pu = PyUnsplash(api_key=config["unsplash_api_key"])
-        search = pu.search(type_='photos', query=query, page=page, per_page=per_page)
+        # # Get API configuration
+        # config = await db.api_configurations.find_one({"user_id": "default"})
+        # if not config or not config.get("unsplash_api_key"):
+        #     raise HTTPException(status_code=400, detail="Unsplash API key not configured.")
         
-        images = []
-        for photo in search.entries:
-            images.append({
-                "id": photo.id,
-                "urls": {
-                    "raw": photo.link_download_location,
-                    "full": photo.link_download_location,
-                    "regular": photo.body.get('urls', {}).get('regular', ''),
-                    "small": photo.body.get('urls', {}).get('small', ''),
-                    "thumb": photo.body.get('urls', {}).get('thumb', '')
-                },
-                "alt_description": photo.body.get('alt_description', ''),
-                "description": photo.body.get('description', ''),
-                "download_url": photo.link_download
-            })
+        # pu = PyUnsplash(api_key=config["unsplash_api_key"])
+        # search = pu.search(type_='photos', query=query, page=page, per_page=per_page)
         
-        return {
-            "results": images,
-            "total": search.total
-        }
+        # images = []
+        # for photo in search.entries:
+        #     images.append({
+        #         "id": photo.id,
+        #         "urls": {
+        #             "raw": photo.link_download_location,
+        #             "full": photo.link_download_location,
+        #             "regular": photo.body.get('urls', {}).get('regular', ''),
+        #             "small": photo.body.get('urls', {}).get('small', ''),
+        #             "thumb": photo.body.get('urls', {}).get('thumb', '')
+        #         },
+        #         "alt_description": photo.body.get('alt_description', ''),
+        #         "description": photo.body.get('description', ''),
+        #         "download_url": photo.link_download
+        #     })
+        
+        # return {
+        #     "results": images,
+        #     "total": search.total
+        # }
         
     except Exception as e:
         logger.error(f"Error searching images: {e}")
