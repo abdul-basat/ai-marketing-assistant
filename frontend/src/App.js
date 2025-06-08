@@ -494,6 +494,68 @@ const PostGenerator = () => {
             </div>
           )}
 
+          {/* Audience Targeting */}
+          <div className="mb-6 border-t pt-4">
+            <h4 className="text-sm font-medium mb-3">Audience Targeting (Optional)</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Age Range</label>
+                <input
+                  type="text"
+                  value={request.audience_target.age_range}
+                  onChange={(e) => setRequest(prev => ({ 
+                    ...prev, 
+                    audience_target: { ...prev.audience_target, age_range: e.target.value }
+                  }))}
+                  className="w-full border rounded px-2 py-1 text-sm"
+                  placeholder="25-35"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Gender</label>
+                <select
+                  value={request.audience_target.gender}
+                  onChange={(e) => setRequest(prev => ({ 
+                    ...prev, 
+                    audience_target: { ...prev.audience_target, gender: e.target.value }
+                  }))}
+                  className="w-full border rounded px-2 py-1 text-sm"
+                >
+                  <option value="">Any</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Non-binary">Non-binary</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Interests</label>
+                <input
+                  type="text"
+                  value={request.audience_target.interests}
+                  onChange={(e) => setRequest(prev => ({ 
+                    ...prev, 
+                    audience_target: { ...prev.audience_target, interests: e.target.value }
+                  }))}
+                  className="w-full border rounded px-2 py-1 text-sm"
+                  placeholder="technology, fitness"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Location</label>
+                <input
+                  type="text"
+                  value={request.audience_target.location}
+                  onChange={(e) => setRequest(prev => ({ 
+                    ...prev, 
+                    audience_target: { ...prev.audience_target, location: e.target.value }
+                  }))}
+                  className="w-full border rounded px-2 py-1 text-sm"
+                  placeholder="United States"
+                />
+              </div>
+            </div>
+          </div>
+
           <button
             onClick={generatePosts}
             disabled={loading}
