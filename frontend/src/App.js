@@ -817,8 +817,81 @@ const HomePage = () => {
   );
 };
 
-// Post Analyzer Component (Basic version)
+// Post Analyzer Component
 const PostAnalyzer = () => {
+  const [content, setContent] = useState('');
+  const [platform, setPlatform] = useState('facebook');
+  const [provider, setProvider] = useState('openai');
+  const [model, setModel] = useState('gpt-4o-mini');
+  const [analysis, setAnalysis] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [models, setModels] = useState({});
+
+  useEffect(() => {
+    loadModels();
+  }, []);
+
+  const loadModels = async () => {
+    try {
+      const response = await apiService.getAvailableModels();
+      setModels(response.data);
+    } catch (error) {
+      console.error('Error loading models:', error);
+    }
+  };
+
+  const analyzePost = async () => {
+    if (!content.trim()) {
+      toast.error('Please enter content to analyze');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await apiService.analyzePost({
+        content,
+        platform,
+        ai_provider: provider,
+        ai_model: model
+      });
+      setAnalysis(response.data);
+      toast.success('Post analyzed successfully!');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Error analyzing post');
+      console.error('Error analyzing post:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const platforms = [
+    { id: 'facebook', name: 'Facebook' },
+    { id: 'instagram', name: 'Instagram' },
+    { id: 'twitter', name: 'Twitter/X' },
+    { id: 'linkedin', name: 'LinkedIn' },
+    { id: 'tiktok', name: 'TikTok' },
+    { id: 'google_ads', name: 'Google Ads' }
+  ];
+
+  const providers = [
+    { id: 'openai', name: 'OpenAI' },
+    { id: 'anthropic', name: 'Anthropic (Claude)' },
+    { id: 'gemini', name: 'Google Gemini' },
+    { id: 'groq', name: 'Groq' }
+  ];
+
+  const getScoreColor = (score) => {
+    if (score >= 80) return 'text-green-600';
+    if (score >= 60) return 'text-yellow-600';
+    return 'text-red-600';
+  };
+
+  const getScoreBackground = (score) => {
+    if (score >= 80) return 'bg-green-100';
+    if (score >= 60) return 'bg-yellow-100';
+    return 'bg-red-100';
+  };
+
   return (
     <div className="max-w-4xl mx-auto p-6">
       <div className="bg-white rounded-lg shadow-lg p-6">
@@ -826,10 +899,147 @@ const PostAnalyzer = () => {
           <BarChart3 className="mr-2" />
           Post Analyzer
         </h2>
-        <div className="text-center py-12 text-gray-500">
-          <BarChart3 className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-          <p>Post analysis feature coming soon!</p>
-          <p className="text-sm">Analyze engagement potential and get improvement tips.</p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Analysis Form */}
+          <div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">Platform</label>
+              <select
+                value={platform}
+                onChange={(e) => setPlatform(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2"
+              >
+                {platforms.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">AI Provider</label>
+              <select
+                value={provider}
+                onChange={(e) => {
+                  setProvider(e.target.value);
+                  setModel(models[e.target.value]?.[0] || '');
+                }}
+                className="w-full border rounded-lg px-3 py-2"
+              >
+                {providers.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {models[provider] && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">AI Model</label>
+                <select
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2"
+                >
+                  {models[provider].map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">Post Content</label>
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 h-32"
+                placeholder="Paste your post content here to analyze..."
+              />
+            </div>
+
+            <button
+              onClick={analyzePost}
+              disabled={loading}
+              className="w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center justify-center"
+            >
+              {loading && <RefreshCw className="animate-spin mr-2 w-4 h-4" />}
+              Analyze Post
+            </button>
+          </div>
+
+          {/* Analysis Results */}
+          <div>
+            {!analysis ? (
+              <div className="text-center py-12 text-gray-500">
+                <BarChart3 className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                <p>Enter your post content and click "Analyze Post"</p>
+                <p className="text-sm">Get engagement scores and improvement tips.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Analysis Results</h3>
+                
+                {/* Score Cards */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className={`p-3 rounded-lg ${getScoreBackground(analysis.engagement_score)}`}>
+                    <div className="text-sm text-gray-600">Engagement</div>
+                    <div className={`text-2xl font-bold ${getScoreColor(analysis.engagement_score)}`}>
+                      {analysis.engagement_score}
+                    </div>
+                  </div>
+                  
+                  <div className={`p-3 rounded-lg ${getScoreBackground(analysis.readability_score)}`}>
+                    <div className="text-sm text-gray-600">Readability</div>
+                    <div className={`text-2xl font-bold ${getScoreColor(analysis.readability_score)}`}>
+                      {analysis.readability_score}
+                    </div>
+                  </div>
+                  
+                  <div className={`p-3 rounded-lg ${getScoreBackground(analysis.tone_consistency_score)}`}>
+                    <div className="text-sm text-gray-600">Tone</div>
+                    <div className={`text-2xl font-bold ${getScoreColor(analysis.tone_consistency_score)}`}>
+                      {analysis.tone_consistency_score}
+                    </div>
+                  </div>
+                  
+                  <div className={`p-3 rounded-lg ${getScoreBackground(analysis.platform_best_practices_score)}`}>
+                    <div className="text-sm text-gray-600">Platform</div>
+                    <div className={`text-2xl font-bold ${getScoreColor(analysis.platform_best_practices_score)}`}>
+                      {analysis.platform_best_practices_score}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Overall Score */}
+                <div className={`p-4 rounded-lg ${getScoreBackground(analysis.overall_score)} border-2 border-current`}>
+                  <div className="text-center">
+                    <div className="text-sm text-gray-600 mb-1">Overall Score</div>
+                    <div className={`text-3xl font-bold ${getScoreColor(analysis.overall_score)}`}>
+                      {analysis.overall_score}/100
+                    </div>
+                  </div>
+                </div>
+
+                {/* Improvement Tips */}
+                {analysis.improvement_tips && analysis.improvement_tips.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2 flex items-center">
+                      <Star className="w-4 h-4 mr-2 text-yellow-500" />
+                      Improvement Tips
+                    </h4>
+                    <ul className="space-y-2">
+                      {analysis.improvement_tips.map((tip, index) => (
+                        <li key={index} className="text-sm text-gray-700 flex items-start">
+                          <span className="w-2 h-2 bg-blue-400 rounded-full mt-2 mr-2 flex-shrink-0"></span>
+                          {tip}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
