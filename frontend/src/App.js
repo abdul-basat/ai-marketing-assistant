@@ -506,7 +506,34 @@ const PostGenerator = () => {
 
         {/* Generated Posts */}
         <div className="bg-white rounded-lg shadow-lg p-6">
-          <h3 className="text-xl font-bold mb-4">Generated Posts</h3>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xl font-bold">Generated Posts</h3>
+            {generatedPosts.length > 0 && (
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => exportPosts('csv')}
+                  className="text-sm bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 flex items-center"
+                >
+                  <Download className="w-3 h-3 mr-1" />
+                  CSV
+                </button>
+                <button
+                  onClick={() => exportPosts('txt')}
+                  className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 flex items-center"
+                >
+                  <Download className="w-3 h-3 mr-1" />
+                  TXT
+                </button>
+                <button
+                  onClick={() => exportPosts('json')}
+                  className="text-sm bg-purple-600 text-white px-3 py-1 rounded hover:bg-purple-700 flex items-center"
+                >
+                  <Download className="w-3 h-3 mr-1" />
+                  JSON
+                </button>
+              </div>
+            )}
+          </div>
           
           {generatedPosts.length === 0 ? (
             <div className="text-gray-500 text-center py-8">
@@ -522,12 +549,22 @@ const PostGenerator = () => {
                     <div key={postIndex} className="mb-4 border-l-4 border-blue-200 pl-4">
                       <div className="flex justify-between items-center mb-2">
                         <span className="font-medium text-blue-600 capitalize">{post.platform}</span>
-                        <button
-                          onClick={() => copyToClipboard(post.content)}
-                          className="text-gray-500 hover:text-gray-700"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </button>
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => schedulePost(post, post.platform)}
+                            className="text-gray-500 hover:text-gray-700"
+                            title="Schedule Post"
+                          >
+                            <Calendar className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => copyToClipboard(post.content)}
+                            className="text-gray-500 hover:text-gray-700"
+                            title="Copy Content"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                       
                       <p className="text-gray-800 mb-2">{post.content}</p>
