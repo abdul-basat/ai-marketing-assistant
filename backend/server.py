@@ -241,14 +241,14 @@ async def get_available_models():
             "gemini-2.0-flash",
             "gemini-2.0-flash-preview-image-generation",
             "gemini-2.0-flash-lite",
-            "gemini-1.5-flash",
-            "gemini-1.5-flash-8b",
-            "gemini-1.5-pro"
+            "gemini-2.0-flash-lite",
+            "gemini-2.0-flash-lite",
+            "gemini-2.0-flash"
         ],
         "groq": [
             "llama-3.3-70b-versatile",
             "llama-3.1-8b-instant",
-            "mixtral-8x7b-32768"
+            "mistral-saba-24b"
         ]
     }
 
