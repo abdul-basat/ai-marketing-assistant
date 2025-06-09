@@ -4,6 +4,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import asyncio
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -200,6 +201,81 @@ class SocialCredentialCreateRequest(BaseModel):
 class SocialCredentialResponse(BaseModel):
     id: str
     platform_name: str
+
+# Background Task for Processing Scheduled Posts
+async def check_and_process_due_posts():
+    logger.info("Scheduler: Checking for due posts...")
+    try:
+        now_utc = datetime.utcnow()
+        due_posts_cursor = db.scheduled_posts.find({
+            "status": "scheduled",
+            "scheduled_date": {"$lte": now_utc}
+        })
+
+        async for post_data in due_posts_cursor:
+            post_id = post_data["id"]
+            platform_str = post_data["platform"] # platform is a string from DB
+            logger.info(f"Scheduler: Processing post ID: {post_id} for platform: {platform_str} scheduled at {post_data['scheduled_date']}")
+
+            new_status = "processed_simulated" # Default to simulated success for this step
+
+            # Attempt to fetch and decrypt credentials
+            if not CREDENTIAL_ENCRYPTION_KEY:
+                logger.error(f"Scheduler: CREDENTIAL_ENCRYPTION_KEY not configured. Cannot process post ID: {post_id}")
+                new_status = "failed_config_error"
+            else:
+                try:
+                    # Ensure user_id exists in post_data, defaulting if necessary for safety,
+                    # though ScheduledPost model defines user_id = "default"
+                    user_id_for_creds = post_data.get("user_id", "default")
+
+                    credential_doc = await db.social_credentials.find_one({
+                        "user_id": user_id_for_creds,
+                        "platform_name": platform_str
+                    })
+
+                    if not credential_doc:
+                        logger.warning(f"Scheduler: No credentials found for platform {platform_str} for post ID: {post_id}. User ID: {user_id_for_creds}")
+                        new_status = "failed_no_creds"
+                    else:
+                        try:
+                            decrypted_creds_json = decrypt_data(credential_doc["encrypted_credentials"], CREDENTIAL_ENCRYPTION_KEY)
+                            # For now, just log success of decryption. Actual use of creds is for next milestone.
+                            logger.info(f"Scheduler: Credentials decrypted successfully for post ID: {post_id}, platform: {platform_str}.")
+                            # Placeholder for actual publishing logic:
+                            logger.info(f"Scheduler: SIMULATING publishing of post ID {post_id} to {platform_str}. Content: {post_data.get('content', '')[:50]}...")
+                            # new_status remains "processed_simulated"
+                        except ValueError as e: # Catch decryption error from decrypt_data
+                            logger.error(f"Scheduler: Failed to decrypt credentials for post ID: {post_id}, platform: {platform_str}. Error: {e}")
+                            new_status = "failed_creds_decryption"
+                        except Exception as e:
+                            logger.error(f"Scheduler: Unexpected error during credential handling for post ID: {post_id}. Error: {e}")
+                            new_status = "failed_unknown_creds_error"
+
+                except Exception as e:
+                    logger.error(f"Scheduler: Error fetching credentials from DB for post ID: {post_id}. Error: {e}")
+                    new_status = "failed_db_creds_fetch"
+
+            # Update post status
+            await db.scheduled_posts.update_one(
+                {"_id": post_data["_id"]}, # Use MongoDB's internal _id for reliable update
+                {"$set": {"status": new_status, "updated_at": datetime.utcnow()}}
+            )
+            logger.info(f"Scheduler: Post ID: {post_id} status updated to {new_status}.")
+
+    except Exception as e:
+        logger.error(f"Scheduler: Error in check_and_process_due_posts main loop: {e}", exc_info=True)
+    logger.info("Scheduler: Finished checking for due posts.")
+
+async def run_scheduler():
+    logger.info("Background scheduler starting...")
+    while True:
+        try:
+            await check_and_process_due_posts()
+        except Exception as e:
+            logger.error(f"Scheduler: Unhandled exception in run_scheduler loop: {e}", exc_info=True)
+
+        await asyncio.sleep(60) # Check every 60 seconds
 
 # API Configuration endpoints
 @api_router.post("/config", response_model=APIConfiguration)
@@ -844,6 +920,11 @@ async def health_check():
 
 # Include the router in the main app
 app.include_router(api_router)
+
+@app.on_event("startup")
+async def startup_event():
+    logger.info("Application startup: Launching background scheduler.")
+    asyncio.create_task(run_scheduler())
 
 app.add_middleware(
     CORSMiddleware,
