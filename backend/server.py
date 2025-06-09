@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Query, BackgroundTasks
+from fastapi import FastAPI, APIRouter, HTTPException, Query, BackgroundTasks, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -16,6 +16,8 @@ from emergentintegrations.llm.chat import LlmChat, UserMessage
 # Temporarily removing Unsplash functionality
 # from python_unsplash import PyUnsplash
 
+from .security import encrypt_data, decrypt_data
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
@@ -24,11 +26,8 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Create the main app without a prefix
-app = FastAPI(title="AI Marketing Assistant", version="1.0.0")
-
-# Create a router with the /api prefix
-api_router = APIRouter(prefix="/api")
+# Credential Encryption Key
+CREDENTIAL_ENCRYPTION_KEY = os.environ.get('CREDENTIAL_ENCRYPTION_KEY')
 
 # Configure logging
 logging.basicConfig(
@@ -36,6 +35,15 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+if not CREDENTIAL_ENCRYPTION_KEY:
+    logger.warning("CREDENTIAL_ENCRYPTION_KEY is not set in the environment. Credential encryption/decryption will fail.")
+
+# Create the main app without a prefix
+app = FastAPI(title="AI Marketing Assistant", version="1.0.0")
+
+# Create a router with the /api prefix
+api_router = APIRouter(prefix="/api")
 
 # Enums
 class PostType(str, Enum):
@@ -86,6 +94,14 @@ class APIConfigurationCreate(BaseModel):
     gemini_api_key: Optional[str] = None
     groq_api_key: Optional[str] = None
     unsplash_api_key: Optional[str] = None
+
+class SocialPlatformCredential(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str = "default"
+    platform_name: str  # e.g., "twitter", "linkedin"
+    encrypted_credentials: str  # JSON string of credentials dictionary, then encrypted
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 class AudienceTarget(BaseModel):
     age_range: Optional[str] = None
@@ -176,6 +192,14 @@ class UnsplashImage(BaseModel):
     alt_description: Optional[str]
     description: Optional[str]
     download_url: str
+
+class SocialCredentialCreateRequest(BaseModel):
+    platform_name: str
+    credentials: Dict[str, str]
+
+class SocialCredentialResponse(BaseModel):
+    id: str
+    platform_name: str
 
 # API Configuration endpoints
 @api_router.post("/config", response_model=APIConfiguration)
@@ -612,6 +636,85 @@ async def search_images(query: str, page: int = 1, per_page: int = 15):
     except Exception as e:
         logger.error(f"Error searching images: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# Social Platform Credential Management Endpoints
+@api_router.post("/social-credentials", response_model=SocialCredentialResponse, status_code=201)
+async def add_social_credential(payload: SocialCredentialCreateRequest):
+    if not CREDENTIAL_ENCRYPTION_KEY:
+        raise HTTPException(status_code=500, detail="Server configuration error: Encryption key not available.")
+
+    try:
+        credentials_json = json.dumps(payload.credentials)
+        encrypted_creds_str = encrypt_data(credentials_json, CREDENTIAL_ENCRYPTION_KEY)
+
+        existing_credential = await db.social_credentials.find_one({
+            "user_id": "default",
+            "platform_name": payload.platform_name
+        })
+
+        current_time = datetime.utcnow()
+        credential_id: str
+
+        if existing_credential:
+            await db.social_credentials.update_one(
+                {"_id": existing_credential["_id"]},
+                {"$set": {
+                    "encrypted_credentials": encrypted_creds_str,
+                    "updated_at": current_time
+                }}
+            )
+            credential_id = existing_credential["id"]
+        else:
+            new_credential_doc = SocialPlatformCredential(
+                platform_name=payload.platform_name,
+                encrypted_credentials=encrypted_creds_str
+                # id, user_id, created_at, updated_at are set by model defaults or here
+            )
+            # Override defaults that might not be set if we construct dict directly
+            new_credential_data = new_credential_doc.dict()
+            new_credential_data["created_at"] = current_time
+            new_credential_data["updated_at"] = current_time
+
+            await db.social_credentials.insert_one(new_credential_data)
+            credential_id = new_credential_data["id"]
+
+        return SocialCredentialResponse(id=credential_id, platform_name=payload.platform_name)
+
+    except ValueError as ve: # Catch specific encryption/decryption errors
+        logger.error(f"Value error during social credential processing: {ve}")
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Error adding/updating social credential: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process social platform credentials.")
+
+@api_router.get("/social-credentials", response_model=List[Dict[str, str]])
+async def list_social_credentials():
+    try:
+        credentials_cursor = db.social_credentials.find({"user_id": "default"})
+        platforms = [{"platform_name": cred["platform_name"]} async for cred in credentials_cursor]
+        return platforms
+    except Exception as e:
+        logger.error(f"Error listing social credentials: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve social platform credentials.")
+
+@api_router.delete("/social-credentials/{platform_name}", status_code=204)
+async def delete_social_credential(platform_name: str):
+    try:
+        result = await db.social_credentials.delete_one({
+            "user_id": "default",
+            "platform_name": platform_name
+        })
+
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Credentials for platform not found.")
+
+        return Response(status_code=204) # No content
+
+    except HTTPException: # Re-raise HTTPException directly
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting social credential for platform {platform_name}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete social platform credentials.")
 
 # Scheduling endpoints
 @api_router.post("/schedule-post", response_model=ScheduledPost)
