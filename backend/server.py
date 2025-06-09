@@ -155,12 +155,20 @@ class ScheduledPost(BaseModel):
     scheduled_date: datetime
     status: str = "scheduled"  # scheduled, published, cancelled
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 class ScheduledPostCreate(BaseModel):
     platform: Platform
     content: str
     hashtags: Optional[List[str]] = None
     scheduled_date: datetime
+
+class ScheduledPostUpdate(BaseModel):
+    platform: Optional[Platform] = None
+    content: Optional[str] = None
+    hashtags: Optional[List[str]] = None
+    scheduled_date: Optional[datetime] = None
+    status: Optional[str] = None
 
 class UnsplashImage(BaseModel):
     id: str
@@ -626,6 +634,39 @@ async def get_scheduled_posts():
     except Exception as e:
         logger.error(f"Error getting scheduled posts: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.put("/scheduled-posts/{post_id}", response_model=ScheduledPost)
+async def update_scheduled_post(post_id: str, post_update: ScheduledPostUpdate):
+    """Update a scheduled post"""
+    try:
+        existing_post_data = await db.scheduled_posts.find_one({"id": post_id})
+        if not existing_post_data:
+            raise HTTPException(status_code=404, detail="Scheduled post not found")
+
+        update_query = {"$set": {}}
+        update_payload = post_update.dict(exclude_unset=True)
+
+        if update_payload:
+            update_query["$set"].update(update_payload)
+
+        # Always update the updated_at timestamp
+        update_query["$set"]["updated_at"] = datetime.utcnow()
+
+        await db.scheduled_posts.update_one({"id": post_id}, update_query)
+
+        updated_post_data = await db.scheduled_posts.find_one({"id": post_id})
+        if not updated_post_data:
+            # This case should ideally not happen if the update was successful and ID is correct
+            logger.error(f"Failed to fetch post {post_id} after update.")
+            raise HTTPException(status_code=500, detail="Failed to retrieve post after update.")
+
+        return ScheduledPost(**updated_post_data)
+
+    except HTTPException: # Re-raise HTTPException directly
+        raise
+    except Exception as e:
+        logger.error(f"Error updating scheduled post {post_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred while updating scheduled post: {str(e)}")
 
 @api_router.delete("/scheduled-posts/{post_id}")
 async def delete_scheduled_post(post_id: str):
