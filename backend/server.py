@@ -239,7 +239,6 @@ async def get_available_models():
             "gemini-2.5-flash-preview-04-17",
             "gemini-2.5-pro-preview-05-06", 
             "gemini-2.0-flash",
-            "gemini-2.0-flash-preview-image-generation",
             "gemini-2.0-flash-lite",
             "gemini-2.0-flash-lite",
             "gemini-2.0-flash-lite",
