@@ -237,7 +237,6 @@ async def get_available_models():
         ],
         "gemini": [
             "gemini-2.5-flash-preview-04-17",
-            "gemini-2.5-pro-preview-05-06", 
             "gemini-2.0-flash",
             "gemini-2.0-flash-lite",
             "gemini-2.0-flash-lite",
@@ -339,7 +338,27 @@ Platform Requirements:
                 if variant_num > 1:
                     prompt += f"This is variant #{variant_num} - make it different from previous versions while maintaining the same core message.\n"
                 
-                prompt += """
+                if request.ai_provider == AIProvider.GEMINI:
+                    example_json_fields = ['"content": "The main post content here"']
+                    if request.include_hashtags:
+                        example_json_fields.append('"hashtags": ["hashtag1", "hashtag2", "hashtag3"]')
+                    if request.include_seo_optimization and request.seo_keywords:
+                        example_json_fields.append('"meta_description": "SEO meta description if requested"')
+
+                    if len(example_json_fields) > 1: # More than just content
+                        prompt += f"""
+Please respond in this exact JSON format:
+{{
+    {", ".join(example_json_fields)}
+}}
+
+Only return valid JSON, no additional text."""
+                    else:
+                        prompt += """
+
+Please provide only the post content as plain text, without any JSON formatting, hashtags, or meta_description."""
+                else:
+                    prompt += """
 Please respond in this exact JSON format:
 {
     "content": "The main post content here",
@@ -353,8 +372,14 @@ Only return valid JSON, no additional text."""
                 ai_response = await get_ai_response(prompt, request.ai_provider, request.ai_model, api_key)
                 
                 try:
-                    # Parse JSON response
-                    response_data = json.loads(ai_response)
+                    processed_response = ai_response
+                    if request.ai_provider == AIProvider.GEMINI:
+                        if processed_response.startswith("```json\n"):
+                            processed_response = processed_response[len("```json\n"):]
+                        if processed_response.endswith("\n```"):
+                            processed_response = processed_response[:-len("\n```")]
+
+                    response_data = json.loads(processed_response)
                     
                     post_content = PostContent(
                         platform=platform,
@@ -366,9 +391,28 @@ Only return valid JSON, no additional text."""
                     
                 except json.JSONDecodeError:
                     # Fallback if JSON parsing fails
+                    processed_response_fallback = ai_response
+                    if request.ai_provider == AIProvider.GEMINI:
+                        if processed_response_fallback.startswith("```json\n"):
+                            processed_response_fallback = processed_response_fallback[len("```json\n"):]
+                        if processed_response_fallback.endswith("\n```"):
+                            processed_response_fallback = processed_response_fallback[:-len("\n```")]
+
+                        # If Gemini was asked for plain text, this is the expected path.
+                        if not (request.include_hashtags or (request.include_seo_optimization and request.seo_keywords)):
+                            post_content = PostContent(
+                                platform=platform,
+                                content=processed_response_fallback,
+                                hashtags=None,
+                                meta_description=None
+                            )
+                            platform_posts.append(post_content)
+                            continue # Skip to next platform iteration
+
+                    # For other providers or if Gemini was expected to return JSON but failed
                     post_content = PostContent(
                         platform=platform,
-                        content=ai_response,
+                        content=processed_response_fallback, # Use stripped version for Gemini here too
                         hashtags=None,
                         meta_description=None
                     )
