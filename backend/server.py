@@ -178,9 +178,11 @@ async def create_or_update_config(config: APIConfigurationCreate):
         existing_config = await db.api_configurations.find_one({"user_id": "default"})
         
         if existing_config:
-            # Update existing config
-            update_data = {k: v for k, v in config.dict().items() if v is not None}
+            # Update existing config - only update non-None values
+            update_data = {k: v for k, v in config.dict().items() if v is not None and v != ""}
             update_data["updated_at"] = datetime.utcnow()
+            
+            logger.info(f"Updating config with data: {update_data}")
             
             await db.api_configurations.update_one(
                 {"user_id": "default"},
@@ -188,17 +190,21 @@ async def create_or_update_config(config: APIConfigurationCreate):
             )
             
             updated_config = await db.api_configurations.find_one({"user_id": "default"})
+            logger.info(f"Config updated successfully")
             return APIConfiguration(**updated_config)
         else:
             # Create new config
             config_dict = config.dict()
-            config_obj = APIConfiguration(**config_dict)
+            config_obj = APIConfiguration(**config_dict, user_id="default")
+            
+            logger.info(f"Creating new config")
+            
             await db.api_configurations.insert_one(config_obj.dict())
             return config_obj
             
     except Exception as e:
         logger.error(f"Error creating/updating config: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Configuration error: {str(e)}")
 
 @api_router.get("/config", response_model=APIConfiguration)
 async def get_config():
