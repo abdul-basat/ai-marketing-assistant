@@ -429,13 +429,13 @@ async def rewrite_content(request: ContentRewriteRequest):
             raise HTTPException(status_code=400, detail=f"API key for {request.ai_provider.value} not configured.")
         
         prompt = f"""
-Rewrite the following post to improve engagement, clarity, and match a {request.tone_style.value} tone for {request.platform.value.upper()}:
+Rewrite the following post for {request.platform.value.upper()} with a {request.tone_style.value} tone:
 
 Original Post: {request.original_content}
 
 Platform Requirements: {get_platform_requirements(request.platform)}
 
-Please make the rewritten content more engaging while maintaining the core message.
+Return only the rewritten content. Do not include any explanations, meta-commentary, or additional text. Just provide the improved post content.
 """
         
         rewritten_content = await get_ai_response(prompt, request.ai_provider, request.ai_model, api_key)
