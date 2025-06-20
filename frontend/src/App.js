@@ -82,10 +82,23 @@ const ConfigurationPage = () => {
   const saveConfig = async () => {
     setLoading(true);
     try {
-      await apiService.updateConfig(config);
+      // Only send non-empty values
+      const configToSave = {};
+      Object.keys(config).forEach(key => {
+        if (config[key] && config[key].trim() !== '' && key !== 'id' && key !== 'user_id' && key !== 'created_at' && key !== 'updated_at') {
+          configToSave[key] = config[key];
+        }
+      });
+      
+      console.log('Saving config:', configToSave);
+      
+      const response = await apiService.updateConfig(configToSave);
+      console.log('Config saved response:', response.data);
+      
+      setConfig(response.data);
       toast.success('Configuration saved successfully!');
     } catch (error) {
-      toast.error('Error saving configuration');
+      toast.error(error.response?.data?.detail || 'Error saving configuration');
       console.error('Error saving config:', error);
     } finally {
       setLoading(false);
