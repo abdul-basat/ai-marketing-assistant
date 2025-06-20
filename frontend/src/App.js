@@ -62,9 +62,11 @@ const ConfigurationPage = () => {
   const loadConfig = async () => {
     try {
       const response = await apiService.getConfig();
+      console.log('Loaded config:', response.data);
       setConfig(response.data);
     } catch (error) {
       console.error('Error loading config:', error);
+      toast.error('Error loading configuration');
     }
   };
 
