@@ -471,27 +471,38 @@ async def analyze_post(request: PostAnalysisRequest):
             raise HTTPException(status_code=400, detail=f"API key for {request.ai_provider.value} not configured.")
         
         prompt = f"""
-Analyze the following post for {request.platform.value.upper()} and score it 0-100 for:
-1. Engagement potential
-2. Readability 
-3. Tone consistency
-4. Platform best practices
+Analyze the following post for {request.platform.value.upper()} and provide detailed scoring:
 
-Post Content: {request.content}
+Post Content: "{request.content}"
 
 Platform Requirements: {get_platform_requirements(request.platform)}
 
-Please respond in this exact JSON format:
+Evaluate and score (0-100) based on:
+1. Engagement potential - How likely is this to get likes, comments, shares?
+2. Readability - How clear and easy to understand is the text?
+3. Tone consistency - How well does the tone match professional communication?
+4. Platform best practices - How well does it follow {request.platform.value} best practices?
+
+Provide realistic scores based on the actual content quality. Consider:
+- Content length and structure
+- Use of engaging elements (questions, calls-to-action, emotional appeal)
+- Clarity of language and grammar
+- Platform-specific optimization
+- Target audience appeal
+
+Also provide 3-5 specific, actionable improvement tips based on the content.
+
+Respond in this exact JSON format:
 {{
-    "engagement_score": 85,
-    "readability_score": 90,
-    "tone_consistency_score": 80,
-    "platform_best_practices_score": 75,
-    "overall_score": 82,
-    "improvement_tips": ["Tip 1", "Tip 2", "Tip 3"]
+    "engagement_score": [realistic score 0-100],
+    "readability_score": [realistic score 0-100], 
+    "tone_consistency_score": [realistic score 0-100],
+    "platform_best_practices_score": [realistic score 0-100],
+    "overall_score": [average of above scores],
+    "improvement_tips": ["Specific tip 1", "Specific tip 2", "Specific tip 3"]
 }}
 
-Only return valid JSON."""
+Only return valid JSON, no additional text."""
         
         ai_response = await get_ai_response(prompt, request.ai_provider, request.ai_model, api_key)
         
