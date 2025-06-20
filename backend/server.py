@@ -206,12 +206,17 @@ async def get_config():
     try:
         config = await db.api_configurations.find_one({"user_id": "default"})
         if not config:
-            # Return empty config
-            return APIConfiguration()
+            # Return empty config with default structure
+            empty_config = APIConfiguration(user_id="default")
+            logger.info("No config found, returning empty config")
+            return empty_config
+        
+        logger.info(f"Found config with keys: {list(config.keys())}")
         return APIConfiguration(**config)
     except Exception as e:
         logger.error(f"Error getting config: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Return empty config on error
+        return APIConfiguration(user_id="default")
 
 # Available models for each provider
 @api_router.get("/available-models")
