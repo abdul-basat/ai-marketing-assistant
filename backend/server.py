@@ -178,9 +178,11 @@ async def create_or_update_config(config: APIConfigurationCreate):
         existing_config = await db.api_configurations.find_one({"user_id": "default"})
         
         if existing_config:
-            # Update existing config
-            update_data = {k: v for k, v in config.dict().items() if v is not None}
+            # Update existing config - only update non-None values
+            update_data = {k: v for k, v in config.dict().items() if v is not None and v != ""}
             update_data["updated_at"] = datetime.utcnow()
+            
+            logger.info(f"Updating config with data: {update_data}")
             
             await db.api_configurations.update_one(
                 {"user_id": "default"},
@@ -188,17 +190,21 @@ async def create_or_update_config(config: APIConfigurationCreate):
             )
             
             updated_config = await db.api_configurations.find_one({"user_id": "default"})
+            logger.info(f"Config updated successfully")
             return APIConfiguration(**updated_config)
         else:
             # Create new config
             config_dict = config.dict()
-            config_obj = APIConfiguration(**config_dict)
+            config_obj = APIConfiguration(**config_dict, user_id="default")
+            
+            logger.info(f"Creating new config")
+            
             await db.api_configurations.insert_one(config_obj.dict())
             return config_obj
             
     except Exception as e:
         logger.error(f"Error creating/updating config: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Configuration error: {str(e)}")
 
 @api_router.get("/config", response_model=APIConfiguration)
 async def get_config():
@@ -206,12 +212,17 @@ async def get_config():
     try:
         config = await db.api_configurations.find_one({"user_id": "default"})
         if not config:
-            # Return empty config
-            return APIConfiguration()
+            # Return empty config with default structure
+            empty_config = APIConfiguration(user_id="default")
+            logger.info("No config found, returning empty config")
+            return empty_config
+        
+        logger.info(f"Found config with keys: {list(config.keys())}")
         return APIConfiguration(**config)
     except Exception as e:
         logger.error(f"Error getting config: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Return empty config on error
+        return APIConfiguration(user_id="default")
 
 # Available models for each provider
 @api_router.get("/available-models")
@@ -246,7 +257,7 @@ async def get_available_models():
             "gemini-1.5-pro"
         ],
         "groq": [
-            "llama-3.1-70b-versatile",
+            "llama-3.3-70b-versatile",
             "llama-3.1-8b-instant",
             "mixtral-8x7b-32768"
         ]
@@ -429,13 +440,13 @@ async def rewrite_content(request: ContentRewriteRequest):
             raise HTTPException(status_code=400, detail=f"API key for {request.ai_provider.value} not configured.")
         
         prompt = f"""
-Rewrite the following post to improve engagement, clarity, and match a {request.tone_style.value} tone for {request.platform.value.upper()}:
+Rewrite the following post for {request.platform.value.upper()} with a {request.tone_style.value} tone:
 
 Original Post: {request.original_content}
 
 Platform Requirements: {get_platform_requirements(request.platform)}
 
-Please make the rewritten content more engaging while maintaining the core message.
+Return only the rewritten content. Do not include any explanations, meta-commentary, or additional text. Just provide the improved post content.
 """
         
         rewritten_content = await get_ai_response(prompt, request.ai_provider, request.ai_model, api_key)
@@ -471,27 +482,38 @@ async def analyze_post(request: PostAnalysisRequest):
             raise HTTPException(status_code=400, detail=f"API key for {request.ai_provider.value} not configured.")
         
         prompt = f"""
-Analyze the following post for {request.platform.value.upper()} and score it 0-100 for:
-1. Engagement potential
-2. Readability 
-3. Tone consistency
-4. Platform best practices
+Analyze the following post for {request.platform.value.upper()} and provide detailed scoring:
 
-Post Content: {request.content}
+Post Content: "{request.content}"
 
 Platform Requirements: {get_platform_requirements(request.platform)}
 
-Please respond in this exact JSON format:
+Evaluate and score (0-100) based on:
+1. Engagement potential - How likely is this to get likes, comments, shares?
+2. Readability - How clear and easy to understand is the text?
+3. Tone consistency - How well does the tone match professional communication?
+4. Platform best practices - How well does it follow {request.platform.value} best practices?
+
+Provide realistic scores based on the actual content quality. Consider:
+- Content length and structure
+- Use of engaging elements (questions, calls-to-action, emotional appeal)
+- Clarity of language and grammar
+- Platform-specific optimization
+- Target audience appeal
+
+Also provide 3-5 specific, actionable improvement tips based on the content.
+
+Respond in this exact JSON format:
 {{
-    "engagement_score": 85,
-    "readability_score": 90,
-    "tone_consistency_score": 80,
-    "platform_best_practices_score": 75,
-    "overall_score": 82,
-    "improvement_tips": ["Tip 1", "Tip 2", "Tip 3"]
+    "engagement_score": [realistic score 0-100],
+    "readability_score": [realistic score 0-100], 
+    "tone_consistency_score": [realistic score 0-100],
+    "platform_best_practices_score": [realistic score 0-100],
+    "overall_score": [average of above scores],
+    "improvement_tips": ["Specific tip 1", "Specific tip 2", "Specific tip 3"]
 }}
 
-Only return valid JSON."""
+Only return valid JSON, no additional text."""
         
         ai_response = await get_ai_response(prompt, request.ai_provider, request.ai_model, api_key)
         
